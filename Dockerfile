@@ -10,7 +10,6 @@ ENV CUDA_HOME=/usr/local/cuda-11.8
 RUN apt-get update && apt-get install -y \
     python3.9 \
     python3.9-dev \
-    python3-pip \
     git \
     wget \
     build-essential \
@@ -22,11 +21,14 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python 3.9 as default
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+# Set Python 3.9 as default and install pip
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
+    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3.9 get-pip.py && \
+    rm get-pip.py
 
 # Create app directory
 WORKDIR /app
@@ -35,10 +37,10 @@ WORKDIR /app
 COPY . .
 
 # Install PyTorch with CUDA 11.8 support
-RUN pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
+RUN python3.9 -m pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
 
 # Install other Python dependencies
-RUN pip install --no-cache-dir \
+RUN python3.9 -m pip install --no-cache-dir \
     numpy \
     scipy \
     scikit-image \
@@ -58,6 +60,7 @@ RUN pip install --no-cache-dir \
     accelerate \
     diffusers \
     omegaconf \
+    networkx \
     xformers==0.0.27.post2
 
 # Build and install custom extensions
@@ -69,7 +72,7 @@ RUN cd /app && \
     git submodule update --init --recursive || true
 
 # Build extensions that don't require complex setup
-RUN pip install -e ./extensions/vox2seq || true
+RUN python3.9 -m pip install -e ./extensions/vox2seq || true
 
 # Production stage
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
@@ -85,7 +88,6 @@ ENV ATTN_BACKEND=xformers
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     python3.9 \
-    python3-pip \
     libglfw3 \
     libgles2 \
     libglib2.0-0 \
@@ -99,13 +101,13 @@ RUN apt-get update && apt-get install -y \
 
 # Set Python 3.9 as default
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 
 # Create non-root user
 RUN useradd -m -s /bin/bash appuser
 
 # Copy from builder
-COPY --from=builder /usr/local/lib/python3.9/dist-packages /usr/local/lib/python3.9/dist-packages
+COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app /app
 
 # Create necessary directories
