@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   trellis:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        - BUILDKIT_INLINE_CACHE=1
+        - BUILDKIT_INLINE_CACHE=${BUILDKIT_INLINE_CACHE:-1}
     image: trellis:latest
     container_name: trellis-app
     
@@ -14,13 +12,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G  # Adjust based on your GPU memory
+          memory: ${GPU_MEMORY:-24G}
         reservations:
-          memory: 16G
+          memory: ${RESERVATION:-16G}
           devices:
             - driver: nvidia
-              count: 1  # or "all" for all GPUs
+              count: ${GPU_COUNT:-all}
               capabilities: [gpu]
+        
     
     # Environment variables
     environment:
@@ -38,7 +37,8 @@ services:
       - SPCONV_ALGO=native
       - ATTN_BACKEND=xformers
       # Add your Hugging Face token if needed for private models
-      # - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - GPU_MEMORY=${GPU_MEMORY:-24G}
     
     # Port mapping
     ports:
@@ -53,7 +53,7 @@ services:
       # Output files
       - trellis_outputs:/app/outputs
       # Optional: Mount local data directory
-      # - ./data:/app/data:ro
+      - ./data/trellis:/app/data
     
     # Resource limits (merged with GPU configuration above)
     # Note: The deploy section is already defined above with GPU configuration
@@ -69,17 +69,13 @@ services:
     # Restart policy
     restart: unless-stopped
     
-    # Network
-    networks:
-      - trellis-network
-    
     # Security options
     security_opt:
       - no-new-privileges:true
     
     # Additional runtime configurations
     runtime: nvidia
-    shm_size: '8gb'  # Shared memory for PyTorch DataLoader
+    shm_size: ${SHM_SIZE:-8gb}  # Shared memory for PyTorch DataLoader
     
     # Logging
     logging:
@@ -96,11 +92,3 @@ volumes:
     driver: local
   trellis_outputs:
     driver: local
-
-# Network configuration
-networks:
-  trellis-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16 
