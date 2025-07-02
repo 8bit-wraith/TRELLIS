@@ -400,4 +400,14 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
 if __name__ == "__main__":
     pipeline = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
     pipeline.cuda()
-    demo.launch()
+    
+    # Get server configuration from environment
+    server_name = os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0")
+    server_port = int(os.environ.get("GRADIO_SERVER_PORT", "7860"))
+    
+    demo.launch(
+        server_name=server_name,
+        server_port=server_port,
+        share=False,
+        show_error=True
+    )

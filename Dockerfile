@@ -1,0 +1,129 @@
+# Use NVIDIA CUDA base image with Python
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04 AS builder
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_HOME=/usr/local/cuda-11.8
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.9 \
+    python3.9-dev \
+    python3-pip \
+    git \
+    wget \
+    build-essential \
+    libglfw3-dev \
+    libgles2-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.9 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
+RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# Create app directory
+WORKDIR /app
+
+# Copy the entire project
+COPY . .
+
+# Install PyTorch with CUDA 11.8 support
+RUN pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
+
+# Install other Python dependencies
+RUN pip install --no-cache-dir \
+    numpy \
+    scipy \
+    scikit-image \
+    gradio \
+    gradio-litmodel3d \
+    imageio \
+    imageio-ffmpeg \
+    easydict \
+    pillow \
+    trimesh \
+    pymeshlab \
+    rembg[gpu] \
+    huggingface-hub \
+    safetensors \
+    einops \
+    transformers \
+    accelerate \
+    diffusers \
+    omegaconf \
+    xformers==0.0.27.post2
+
+# Build and install custom extensions
+ENV TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0"
+ENV MAX_JOBS=4
+
+# Install submodules with error handling
+RUN cd /app && \
+    git submodule update --init --recursive || true
+
+# Build extensions that don't require complex setup
+RUN pip install -e ./extensions/vox2seq || true
+
+# Production stage
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_HOME=/usr/local/cuda-11.8
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+ENV SPCONV_ALGO=native
+ENV ATTN_BACKEND=xformers
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    python3.9 \
+    python3-pip \
+    libglfw3 \
+    libgles2 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    ffmpeg \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.9 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
+RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# Create non-root user
+RUN useradd -m -s /bin/bash appuser
+
+# Copy from builder
+COPY --from=builder /usr/local/lib/python3.9/dist-packages /usr/local/lib/python3.9/dist-packages
+COPY --from=builder /app /app
+
+# Create necessary directories
+RUN mkdir -p /app/tmp /app/outputs /app/models && \
+    chown -R appuser:appuser /app
+
+# Download models at build time (optional - comment out if you want to download at runtime)
+# RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('microsoft/TRELLIS-image-large', cache_dir='/app/models')"
+
+USER appuser
+WORKDIR /app
+
+# Expose Gradio default port
+EXPOSE 7860
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:7860/health')" || exit 1
+
+# Start the application
+CMD ["python", "app.py"] 

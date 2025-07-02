@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  trellis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: trellis:latest
+    container_name: trellis-app
+    
+    # GPU configuration for NVIDIA with resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 24G  # Adjust based on your GPU memory
+        reservations:
+          memory: 16G
+          devices:
+            - driver: nvidia
+              count: 1  # or "all" for all GPUs
+              capabilities: [gpu]
+    
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+      - CUDA_VISIBLE_DEVICES=0
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+      - GRADIO_THEME=default
+      - SYSTEM__SEED=42
+      - HUGGINGFACE_HUB_CACHE=/app/models
+      - TRANSFORMERS_CACHE=/app/models
+      - HF_HOME=/app/models
+      - TORCH_HOME=/app/models/torch
+      - SPCONV_ALGO=native
+      - ATTN_BACKEND=xformers
+      # Add your Hugging Face token if needed for private models
+      # - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+    
+    # Port mapping
+    ports:
+      - "${PORT:-7860}:7860"
+    
+    # Volumes for persistence
+    volumes:
+      # Model cache - persists downloaded models
+      - trellis_models:/app/models
+      # Temporary files
+      - trellis_tmp:/app/tmp
+      # Output files
+      - trellis_outputs:/app/outputs
+      # Optional: Mount local data directory
+      # - ./data:/app/data:ro
+    
+    # Resource limits (merged with GPU configuration above)
+    # Note: The deploy section is already defined above with GPU configuration
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:7860/health', timeout=10)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Network
+    networks:
+      - trellis-network
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Additional runtime configurations
+    runtime: nvidia
+    shm_size: '8gb'  # Shared memory for PyTorch DataLoader
+    
+    # Logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Volumes for data persistence
+volumes:
+  trellis_models:
+    driver: local
+  trellis_tmp:
+    driver: local
+  trellis_outputs:
+    driver: local
+
+# Network configuration
+networks:
+  trellis-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 
