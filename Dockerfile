@@ -1,10 +1,10 @@
 # Use NVIDIA CUDA base image with Python
-FROM nvidia/cuda:12.4.0-cudnn8-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.9.1-devel-ubuntu22.04 AS builder
 
 # Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV CUDA_HOME=/usr/local/cuda-12.4
+ENV CUDA_HOME=/usr/local/cuda-12.9.1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -75,11 +75,11 @@ RUN cd /app && \
 RUN python3.12 -m pip install -e ./extensions/vox2seq || true
 
 # Production stage
-FROM nvidia/cuda:12.4.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.9.1-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV CUDA_HOME=/usr/local/cuda-12.4
+ENV CUDA_HOME=/usr/local/cuda-12.9.1
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 ENV SPCONV_ALGO=native
