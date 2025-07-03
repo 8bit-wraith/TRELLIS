@@ -1,5 +1,5 @@
 # Use NVIDIA CUDA base image with Python
-FROM nvidia/cuda:12.9.1-cudnn8-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04 AS builder
 
 # Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
@@ -75,7 +75,7 @@ RUN cd /app && \
 RUN python3.12 -m pip install -e ./extensions/vox2seq || true
 
 # Production stage
-FROM nvidia/cuda:12.9.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
